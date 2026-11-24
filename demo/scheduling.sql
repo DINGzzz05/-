@@ -1,0 +1,47 @@
+-- H2 migration for both new and existing demonstration databases.
+CREATE TABLE IF NOT EXISTS 教室 (
+    教室编号 VARCHAR(12) PRIMARY KEY,
+    教室名称 NVARCHAR(40) NOT NULL,
+    座位数 INT NOT NULL CHECK (座位数 > 0)
+);
+
+CREATE TABLE IF NOT EXISTS 教学班安排 (
+    开课编号 NVARCHAR(15) PRIMARY KEY REFERENCES 开课情况(开课编号) ON DELETE CASCADE,
+    教室编号 VARCHAR(12) NOT NULL REFERENCES 教室(教室编号),
+    星期 INT NOT NULL CHECK (星期 BETWEEN 1 AND 7),
+    开始节次 INT NOT NULL CHECK (开始节次 BETWEEN 1 AND 12),
+    结束节次 INT NOT NULL CHECK (结束节次 BETWEEN 1 AND 12),
+    容量 INT NOT NULL CHECK (容量 > 0),
+    CHECK (开始节次 <= 结束节次)
+);
+
+CREATE TABLE IF NOT EXISTS 候补记录 (
+    排队编号 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    开课编号 NVARCHAR(15) NOT NULL REFERENCES 教学班安排(开课编号) ON DELETE CASCADE,
+    学号 NVARCHAR(12) NOT NULL REFERENCES 学生(学号) ON DELETE CASCADE,
+    申请时间 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    状态 VARCHAR(12) NOT NULL DEFAULT 'WAITING' CHECK (状态 IN ('WAITING', 'CONFLICT')),
+    UNIQUE (开课编号, 学号)
+);
+
+CREATE INDEX IF NOT EXISTS IDX_候补队列 ON 候补记录 (开课编号, 状态, 排队编号);
+CREATE INDEX IF NOT EXISTS IDX_学生候补 ON 候补记录 (学号, 状态);
+CREATE INDEX IF NOT EXISTS IDX_学生选课 ON 选课情况 (学号, 开课编号);
+CREATE INDEX IF NOT EXISTS IDX_教室时段 ON 教学班安排 (教室编号, 星期, 开始节次, 结束节次);
+
+CREATE TABLE IF NOT EXISTS 排课选课锁 (
+    编号 INT PRIMARY KEY CHECK (编号 = 1),
+    版本 BIGINT NOT NULL
+);
+
+INSERT INTO 排课选课锁(编号, 版本)
+SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM 排课选课锁 WHERE 编号 = 1);
+
+INSERT INTO 教室 (教室编号, 教室名称, 座位数)
+SELECT 'A101', '教学楼 A101', 30 WHERE NOT EXISTS (SELECT 1 FROM 教室 WHERE 教室编号 = 'A101');
+INSERT INTO 教室 (教室编号, 教室名称, 座位数)
+SELECT 'A102', '教学楼 A102', 48 WHERE NOT EXISTS (SELECT 1 FROM 教室 WHERE 教室编号 = 'A102');
+INSERT INTO 教室 (教室编号, 教室名称, 座位数)
+SELECT 'B201', '教学楼 B201', 60 WHERE NOT EXISTS (SELECT 1 FROM 教室 WHERE 教室编号 = 'B201');
+INSERT INTO 教室 (教室编号, 教室名称, 座位数)
+SELECT 'L301', '实验楼 L301', 24 WHERE NOT EXISTS (SELECT 1 FROM 教室 WHERE 教室编号 = 'L301');
